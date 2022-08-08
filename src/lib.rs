@@ -1,7 +1,6 @@
 //! # cancellable-sleep
 //! This library allows threads to sleep until a timer elapses or a shutdown signal is received.
-//! This is especially useful for daemon processes which may sleep for minutes, where the programmer desires that the process terminate immediately upon receiving a signal, while still
-//! allowing the program to clean up after itself before termination.
+//! This is especially useful for daemon processes which may sleep for minutes, where the programmer desires that the sleeping process recieve the signal immediately.
 //!
 //! Obtain channels via `get_channel`.
 //! Perform the "cancellable sleep" via `recv_w_timeout`
@@ -62,11 +61,13 @@ impl SignalHandler {
     }
 }
 
+#[derive(PartialEq)]
 pub enum ChannelCommand {
     Quit,
     Continue,
 }
 
+/// performs the cancellable sleep
 pub struct ChannelHandler {
     rx: UnboundedReceiver<ChannelCommand>,
 }
@@ -86,7 +87,8 @@ impl ChannelHandler {
         self.rx.close();
     }
 
-    /// makes the caller sleep until either `timeout` has elapsed or a shutdown signal is received.
+    /// makes the caller sleep until either `timeout` (in sec) has elapsed or a shutdown signal is received.
+    /// returns `ChannelCommand::Continue` upon timeout and `ChannelCommand::Quit` upon cancellation.
     pub async fn recv_w_timeout(&mut self, timeout: u64) -> ChannelCommand {
         // pinning to the heap may be overkill
         let timeout_task = Box::pin(async {

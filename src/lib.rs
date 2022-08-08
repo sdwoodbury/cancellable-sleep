@@ -82,6 +82,7 @@ impl SignalHandler {
             match signal {
                 SIGHUP | SIGTERM | SIGINT | SIGQUIT => {
                     self.channels.iter().for_each(|ch| {
+                        // this will fail if the channel has been closed. This is OK.
                         let _ = ch.send(ChannelCommand::Quit);
                     });
                     return;

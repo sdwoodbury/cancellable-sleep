@@ -5,7 +5,45 @@
 //! Obtain channels via `get_channel`.
 //! Perform the "cancellable sleep" via `recv_w_timeout`
 //! Create an async task to catch the signals via `await_termination`
-
+//!
+//! example:
+//!
+//! ```
+//! let mut signal_handler = SignalHandler::init().unwrap();
+//! let mut ch1 = signal_handler.get_channel();
+//! let mut ch2 = signal_handler.get_channel();
+//! let mut ch3 = signal_handler.get_channel();
+//!
+//! let t1 = || async move {
+//!     if ch1.recv_w_timeout(30).await == ChannelCommand::Quit {
+//!         println!("quit received by thread 1");
+//!     }
+//!     println!("thread 1 exiting");
+//! };
+//!
+//! let t2 = || async move {
+//!     if ch2.recv_w_timeout(30).await == ChannelCommand::Quit {
+//!         println!("quit received by thread 2");
+//!     }
+//!     println!("thread 2 exiting");
+//! };
+//!
+//! // don't need to pin this because it's not getting passed to join! or select!
+//! tokio::spawn(async move {
+//!     if ch3.recv_w_timeout(30).await == ChannelCommand::Quit {
+//!         println!("quit received by thread 3");
+//!     }
+//!     println!("thread 3 exiting");
+//! });
+//!
+//! let t1 = Box::pin(t1());
+//! let t2 = Box::pin(t2());
+//!
+//! let t3 = Box::pin(signal_handler.await_termination());
+//!
+//! let _ = tokio::join!(t1, t2, t3);
+//! println!("test1 exiting");
+//! ```
 use futures::stream::StreamExt;
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::{Handle, Signals};
@@ -43,9 +81,9 @@ impl SignalHandler {
         while let Some(signal) = self.signals.next().await {
             match signal {
                 SIGHUP | SIGTERM | SIGINT | SIGQUIT => {
-                    for ch in &self.channels {
+                    self.channels.iter().for_each(|ch| {
                         let _ = ch.send(ChannelCommand::Quit);
-                    }
+                    });
                     return;
                 }
                 _ => unreachable!(),
@@ -101,13 +139,7 @@ impl ChannelHandler {
         // warning: take care not to poll a future after completion, as the futures here aren't FusedFuture
         // This code shall get the first completed future and then return
         tokio::select! {
-            option = read_task => match option {
-                Some(cmd) => cmd,
-                None => {
-                    // recv_w_timeout failed because the channel was closed
-                    ChannelCommand::Quit
-                }
-            },
+            option = read_task => option.unwrap_or(ChannelCommand::Quit),
             cmd = timeout_task => cmd
         }
     }

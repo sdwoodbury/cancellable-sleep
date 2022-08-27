@@ -48,7 +48,9 @@ use futures::stream::StreamExt;
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::{Handle, Signals};
 use std::io::Error;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{
+    error::TryRecvError, unbounded_channel, UnboundedReceiver, UnboundedSender,
+};
 use tokio::time::{sleep, Duration};
 
 /// Used to catch termination signals and send Quit commands to every registered channel
@@ -100,7 +102,7 @@ impl SignalHandler {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum ChannelCommand {
     Quit,
     Continue,
@@ -142,6 +144,14 @@ impl ChannelHandler {
         tokio::select! {
             option = read_task => option.unwrap_or(ChannelCommand::Quit),
             cmd = timeout_task => cmd
+        }
+    }
+
+    /// allows the client to check for the shutdown signal without having to sleep.
+    pub fn should_quit(&mut self) -> bool {
+        match self.rx.try_recv() {
+            Ok(cmd) => cmd == ChannelCommand::Quit,
+            Err(e) => e != TryRecvError::Empty,
         }
     }
 }

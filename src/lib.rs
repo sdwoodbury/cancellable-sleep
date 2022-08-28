@@ -154,4 +154,9 @@ impl ChannelHandler {
             Err(e) => e != TryRecvError::Empty,
         }
     }
+
+    /// read without a timeout
+    pub async fn recv(&mut self) -> ChannelCommand {
+        self.rx.recv().await.unwrap_or(ChannelCommand::Quit)
+    }
 }

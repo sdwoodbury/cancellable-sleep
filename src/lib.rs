@@ -83,15 +83,20 @@ impl SignalHandler {
         while let Some(signal) = self.signals.next().await {
             match signal {
                 SIGHUP | SIGTERM | SIGINT | SIGQUIT => {
-                    self.channels.iter().for_each(|ch| {
-                        // this will fail if the channel has been closed. This is OK.
-                        let _ = ch.send(ChannelCommand::Quit);
-                    });
+                    self.issue_quit();
                     return;
                 }
                 _ => unreachable!(),
             }
         }
+    }
+
+    /// allow the client to issue a quit manually
+    pub fn issue_quit(&mut self) {
+        self.channels.iter().for_each(|ch| {
+            // this will fail if the channel has been closed. This is OK.
+            let _ = ch.send(ChannelCommand::Quit);
+        });
     }
 
     /// register a new channel, returning a ChannelHandler, which allows the user to perform a cancellable sleep.
